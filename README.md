@@ -105,7 +105,7 @@ sequenceDiagram
 
 ---
 
-## 📷 Dokumentasi Foto & Hasil Kerja
+## Dokumentasi Foto & Hasil Kerja
 
 <div align="center">
   <table>
@@ -162,8 +162,10 @@ const int   pythonServerPort = 5050;
 Buka `ktm_fr_s3.ino` di Arduino IDE, pastikan pengaturan board sudah sesuai, lalu klik **Upload**.
 
 ### 3. Integrasi Backend Python
-Jalankan server backend pengenalan wajah pada komputer/server lokal:
+Jalankan server backend pengenalan wajah pada komputer/server lokal dari repositori [esp-face-recognition](https://github.com/EdPootis/esp-face-recognition):
 ```bash
+git clone https://github.com/EdPootis/esp-face-recognition.git
+cd esp-face-recognition
 python ktm_face_verification.py
 ```
 
@@ -209,6 +211,12 @@ ktm_fr_s3/
         ├── README.md
         └── diagram.json
 ```
+ 
+---
+
+## Repositori Terkait (Related Repository)
+
+- **AI Face Recognition Backend (Python)**: [EdPootis/esp-face-recognition](https://github.com/EdPootis/esp-face-recognition) — Server backend untuk memproses stream video MJPEG, database mahasiswa (KTM), dan algoritma verifikasi wajah real-time.
 
 ---
 
