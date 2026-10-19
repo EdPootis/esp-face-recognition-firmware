@@ -53,6 +53,15 @@ bool isFrActive = false;
 unsigned long frStartMillis = 0;
 char currentCardUid[32] = "";
 
+// Debounce kartu: kartu yang sama dianggap masih menempel selama masih terbaca
+// dalam jeda ini, sehingga /tap tidak dikirim berulang-ulang
+const unsigned long CARD_DEBOUNCE_MS = 3000UL;
+char lastTapUid[32] = "";
+unsigned long lastCardSeenMillis = 0;
+
+// Status deteksi NFC non-blocking (InListPassiveTarget sedang menunggu kartu)
+bool nfcArmed = false;
+
 // ===========================
 // Konfigurasi WiFi & Backend (Secrets / Git-ignored)
 // ===========================
@@ -245,6 +254,8 @@ void setup() {
 
   // 2. Inisialisasi Hardware Serial1 untuk Modul NFC PN532 (HSU Mode)
   Serial1.begin(115200, SERIAL_8N1, PN532_RX_PIN, PN532_TX_PIN);
+  // Library membaca frame balasan dengan readBytes(); timeout default 1000 ms membuat loop() tertahan
+  Serial1.setTimeout(30);
   nfc.begin();
 
   uint32_t versiondata = nfc.getFirmwareVersion();
@@ -415,10 +426,39 @@ void loop() {
   // ============================================================================
   // 2. BACA CARD READER NFC PN532 (HSU GPIO 47 & 48)
   // ============================================================================
-  uint8_t uid[7];
-  uint8_t uidLength;
-  // Coba baca kartu NFC ISO 14443-A (KTM, Flazz, E-Money, NFC HP) dengan timeout 50 ms
-  bool cardDetected = nfc.readPassiveTargetID(PN532_MIFARE_ISO14443A, uid, &uidLength, 50);
+  uint8_t uid[10]; // ISO 14443-A UID bisa 4, 7, atau 10 byte
+  uint8_t uidLength = 0;
+  bool cardDetected = false;
+  // Deteksi non-blocking: kirim InListPassiveTarget sekali, lalu cek tiap loop apakah
+  // PN532 sudah membalas (balasan hanya datang saat ada kartu ISO 14443-A di medan RF)
+  if (!nfcArmed) {
+    while (Serial1.available()) Serial1.read(); // Buang sisa byte frame lama (DCS/postamble/ATS)
+    nfcArmed = nfc.startPassiveTargetIDDetection(PN532_MIFARE_ISO14443A);
+  } else if (Serial1.available()) {
+    delay(5); // Tunggu frame balasan lengkap (~2 ms @115200)
+    cardDetected = nfc.readDetectedPassiveTargetID(uid, &uidLength);
+    nfcArmed = false; // Pasang ulang deteksi pada loop berikutnya
+  }
+
+  if (cardDetected) {
+    String uidCheck = "";
+    for (uint8_t i = 0; i < uidLength; i++) {
+      if (uid[i] < 0x10) uidCheck += "0";
+      uidCheck += String(uid[i], HEX);
+    }
+    uidCheck.toUpperCase();
+
+    // Kartu yang sama masih menempel di reader -> jangan picu ulang FR & /tap
+    bool sameCardStillPresent = (strcmp(uidCheck.c_str(), lastTapUid) == 0) &&
+                                (currentMillis - lastCardSeenMillis < CARD_DEBOUNCE_MS);
+    lastCardSeenMillis = currentMillis;
+    if (sameCardStillPresent) {
+      cardDetected = false;
+      lastMotionMillis = currentMillis;
+    } else {
+      strncpy(lastTapUid, uidCheck.c_str(), sizeof(lastTapUid) - 1);
+    }
+  }
 
   if (cardDetected) {
     String uidClean = "";
